@@ -165,7 +165,24 @@
 (defn query->field-values
   "Convert a MBQL query to a map of field->value"
   [query]
-  (into {} (map (fn [param] [(:name (qp.store/field (get-in param [:target 1 1]))) (:value param)]) (:user-parameters query))))
+  (into {} (filter identity
+                   (map (fn [param]
+                          (cond
+                            ; if the parameter has a name already, use it
+                            (contains? param :name)
+                            [(:name param) (:value param)]
+
+                            ; if it's a dimension parameter with a "field-id", look up the field-id
+                            ; to get its name
+                            (= :dimension (first (:target param)))
+                            (let [dimension-params (apply array-map (second (:target param)))
+                                  field-id (:field-id dimension-params)]
+                              (when field-id
+                                [(:name (qp.store/field field-id)) (:value param)]))
+
+                            ; all other field types are ignored
+                            ))
+                        (:user-parameters query)))))
 
 (defmethod qputil/query->remark :redshift
   [_ {{:keys [executed-by query-hash card-id], :as info} :info, query-type :type :as query}]
